@@ -1,0 +1,29 @@
+﻿@inherits LayoutComponentBase
+
+<AuthorizeView>
+    <Authorized>
+        <Header />
+        <NavMenu />
+        <main id="main" class="main">
+            @Body
+        </main>
+        <footer id="footer" class="footer">
+            <div class="copyright">
+                &copy; Copyright <strong><span>Health&Med - Uma Operadora de Saúde</span></strong>. Todos os direitos reservados
+            </div>
+
+        </footer>
+    </Authorized>
+    <NotAuthorized>
+        <main id="main" class="main">
+            <LoginRedirect />
+            <h1>não autorizado</h1>
+        </main>
+    </NotAuthorized>
+</AuthorizeView>
+
+<div id="blazor-error-ui">
+    An unhandled error has occurred.
+    <a href="" class="reload">Reload</a>
+    <a class="dismiss">🗙</a>
+</div>

@@ -1,0 +1,63 @@
+﻿<aside id="sidebar" class="sidebar">
+
+    <ul class="sidebar-nav" id="sidebar-nav">
+
+        <!-- Dashboard Almoxarifado Nav -->
+        <li class="nav-item">
+            <NavLink class="nav-link" href="/">
+                <i class="ri ri-dashboard-line"></i>
+                <span>Health&Med</span>
+            </NavLink>
+        </li><!-- End Dashboard Almoxarifado Nav -->
+        <!-- Configuração Nav -->
+        <li class="nav-item">
+            <a class="nav-link collapsed" data-bs-toggle="collapse" href="#configuracao-nav">
+                <i class="bi bi-gear"></i><span>Cadastro de Usuários</span><i class="bi bi-chevron-down ms-auto"></i>
+            </a>
+            <ul id="configuracao-nav" class="nav-content collapse" data-bs-parent="#sidebar-nav">
+                <li>
+                    <NavLink class="nav-link" href="/UsuarioPaciente/Index">
+                        <i class="bi bi-person"></i><span>Cadastro de Usuários Paciente</span>
+                    </NavLink>
+                </li>
+                <li>
+                    <NavLink class="nav-link" href="/UsuarioProfissionalMedico/Index">
+                        <i class="bi bi-person"></i><span>Cadastro de Usuários Profissional</span>
+                    </NavLink>
+                </li>
+            </ul>
+        </li><!-- End Configuração Nav -->
+        <li class="nav-item">
+            <a class="nav-link collapsed" data-bs-toggle="collapse" href="#operacao-nav">
+                <i class="bi bi-gear"></i><span>Operação</span><i class="bi bi-chevron-down ms-auto"></i>
+            </a>
+            <ul id="operacao-nav" class="nav-content collapse" data-bs-parent="#sidebar-nav">
+                <li>
+                    <NavLink class="nav-link" href="/AgendaProfissionalMedico/Index">
+                        <i class="bi bi-search"></i><span>Procurar por médicos Disponíveis</span>
+                    </NavLink>
+                </li>
+                <li>
+                    <NavLink class="nav-link" href="/AgendaProfissionalMedico/Index">
+                        <i class="bi bi-calendar-check"></i><span>Agendar Consulta</span>
+                    </NavLink>
+                </li>
+            </ul>
+        </li><!-- End Configuração Nav -->
+        <li class="nav-item">
+            <a class="nav-link collapsed" data-bs-toggle="collapse" href="#profissional-nav">
+                <i class="bi bi-gear"></i><span>Configuração</span><i class="bi bi-chevron-down ms-auto"></i>
+            </a>
+            <ul id="profissional-nav" class="nav-content collapse" data-bs-parent="#sidebar-nav">
+               
+                <li>
+                    <NavLink class="nav-link" href="/AgendaProfissionalMedico/Index">
+                        <i class="bi bi-calendar3"></i><span>Abrir agenda do Profissional</span>
+                    </NavLink>
+                </li>
+            </ul>
+        </li><!-- End Configuração Nav -->
+
+    </ul>
+
+</aside>

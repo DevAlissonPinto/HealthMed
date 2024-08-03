@@ -1,0 +1,165 @@
+﻿@page "/ativos/index"
+@using HealthMed.Domain.Entities
+@using HealthMed.Domain.Interfaces.Application
+@using HealthMed.Infra.Repository.Context
+@using HealthMed.Web.Models
+@using AutoMapper
+
+@inject NavigationManager navManager
+@inject IAtivoApplication<HealthMedContext> _ativoApplication
+@inject IMapper _mapper
+
+@rendermode InteractiveServer
+
+<PageTitle>Siss Saúde - Ativos</PageTitle>
+
+<div class="pagetitle">
+    <h1>Listagem de Ativos</h1>
+    <nav>
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/"><i class="bi bi-house-fill"></i></a></li>
+            <li class="breadcrumb-item active">Ativo</li>
+        </ol>
+    </nav>
+</div>
+
+@if (showConfirmation)
+{
+    <div class="modal show" tabindex="-1" style="display:block; background-color: rgba(0,0,0,0.5);" @onclick="CloseModal">
+        <div class="modal-dialog">
+            <div class="modal-content" @onclick:stopPropagation>
+                <div class="modal-header">
+                    <h5 class="modal-title">@Title</h5>
+                    <button type="button" class="btn-close" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>@Body</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseModal">Cancelar</button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmDelete">Excluir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="card">
+    <div class="card-header">Ativos Cadastrados</div>
+    <div class="card-body">
+        @if (Ativos == null || Ativos.Count == 0)
+        {
+            <p><em>@Mensagem</em></p>
+        }
+        else
+        {
+            <!-- Tabela de ativos -->
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th class="col-2">Id</th>
+                        <th class="col-2">Tipo de Ativo</th>
+                        <th class="col-2">Nome</th>
+                        <th class="col-2">Código</th>
+                        <th class="col-2 text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var model in Ativos)
+                    {
+                        <tr>
+                            <td>@model.Id.ToString()</td>
+                            <td>@model.TipoAtivo.ToString()</td>
+                            <td>@model.Nome</td>
+                            <td>@model.Codigo</td>
+                            <td class="text-center">
+                                <!-- Botão de edição com ícone, que navega para a página de edição passando o Id -->
+                                <NavLink class="btn btn-primary btn-md" href="@($"/ativo/{model.Id}")">
+                                    <i class="bi bi-pencil-square"></i>
+                                </NavLink>
+                                <!-- Botão de exclusão com ícone, que mostra a confirmação de exclusão -->
+                                <button class="btn btn-danger btn-md" @onclick="() => ShowDeleteConfirmation(model.Id)">
+                                    <i class="bi bi-trash-fill"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+<div class="text-end mt-4">
+    <a href="ativo/create" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Cadastrar Novo Ativo
+    </a>
+</div>
+
+@code {
+    private List<AtivoViewModel> Ativos { get; set; } = new();
+    public string Mensagem { get; set; } = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            Mensagem = "Carregando...";
+
+            MapperAtivo(await CarregarAtivos());
+
+            if (Ativos == null || Ativos.Count == 0)
+                Mensagem = "Não há ativos registrados no sistema.";
+        }
+        catch (Exception ex)
+        {
+            Mensagem = "Não há ativos registrados no sistema.";
+            Console.WriteLine($"Erro ao carregar os ativos: {ex.Message}");
+        }
+    }
+
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string Body { get; set; } = string.Empty;
+
+    private int selectedAtivoId;
+    private bool showConfirmation = false;
+
+    private void ShowDeleteConfirmation(int ativoId)
+    {
+        selectedAtivoId = ativoId;
+        Title = "Confirmar Exclusão";
+        Body = "Tem certeza de que deseja excluir este ativo?";
+        showConfirmation = true;
+    }
+
+    private void CloseModal()
+    {
+        showConfirmation = false;
+        StateHasChanged(); // Força a atualização do estado da UI
+    }
+
+    private async Task ConfirmDelete()
+    {
+        try
+        {
+            await _ativoApplication.DeleteAsync(selectedAtivoId);
+
+            MapperAtivo(await CarregarAtivos());
+
+            if (Ativos == null || Ativos.Count == 0)
+                Mensagem = "Não há ativos registrados no sistema.";
+
+            CloseModal();
+        }
+        catch (Exception ex)
+        {
+            Mensagem = "Ocorreu um erro ao deletar o ativo.";
+            Console.WriteLine($"Ocorreu um erro ao deletar o ativo: {ex.Message}");
+        }
+    }
+
+    private async Task<IEnumerable<Ativo>> CarregarAtivos() => await _ativoApplication.GetAllAsync();
+
+    private void MapperAtivo(IEnumerable<Ativo> ativos) => Ativos = _mapper.Map<List<AtivoViewModel>>(ativos);
+}

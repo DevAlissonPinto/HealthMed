@@ -1,0 +1,257 @@
+﻿@page "/AgendaProfissionalMedico/{Id:int?}"
+@using HealthMed.Web.Models
+@using HealthMed.Domain.Interfaces.Application
+@using HealthMed.Infra.Repository.Context
+@using HealthMed.Domain.Entities
+@using AutoMapper
+@inject IJSRuntime JSRuntime
+
+@inject NavigationManager navManager
+@inject IAgendaHorarioMedicoApplication<HealthMedContext> _agendaHorarioMedicoApplication
+@inject IProfissionalMedicoApplication<HealthMedContext> _medicoApplication
+@inject IMapper _mapper
+
+@rendermode InteractiveServer
+
+<PageTitle>HealthMed - @((Model.Id == 0 ? "Cadastro de Horário" : "Edição de Horário"))</PageTitle>
+
+<div class="pagetitle">
+    <h1>@(Model.Id == 0 ? "Cadastro de Horário" : "Edição de Horário")</h1>
+    <nav>
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/"><i class="bi bi-house-fill"></i></a></li>
+            <li class="breadcrumb-item"><a href="/AgendaProfissionalMedico">Horários</a></li>
+            <li class="breadcrumb-item active">@(Model.Id == 0 ? "Cadastro" : "Edição")</li>
+        </ol>
+    </nav>
+</div>
+
+@if (!string.IsNullOrEmpty(ErrorMessage))
+{
+    <div class="alert alert-danger" role="alert">
+        @ErrorMessage
+    </div>
+}
+
+<div class="card">
+    <div class="card-header">Informações do Horário</div>
+    <div class="card-body">
+
+        <EditForm Model="@Model" OnValidSubmit="OnValidSubmitAsync">
+            <DataAnnotationsValidator />
+            <div class="row">
+                <div class="col-md-4 pb-2">
+                    <label class="form-label">Data e Hora:</label>
+                    <InputDate @bind-Value="Model.DataHora" class="form-control" />
+                    <ValidationMessage For="@(() => Model.DataHora)" />
+                </div>
+                <div class="col-md-4 pb-2">
+                    <label class="form-label">Disponível:</label>
+                    <InputCheckbox @bind-Value="Model.Disponivel" class="form-check-input" />
+                    <ValidationMessage For="@(() => Model.Disponivel)" />
+                </div>
+                <div class="col-md-4 pb-2">
+                    <label class="form-label">Médico:</label>
+                    <InputSelect @bind-Value="Model.MedicoId" class="form-control">
+                        @foreach (var medico in Medicos)
+                        {
+                            <option value="@medico.Id">@medico.Nome</option>
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="@(() => Model.MedicoId)" />
+                </div>
+            </div>
+
+            <!-- Campos de período -->
+            <div class="row">
+                <div class="col-md-4 pb-2">
+                    <label class="form-label">Data Início:</label>
+                    <InputDate @bind-Value="StartDate" class="form-control" />
+                </div>
+                <div class="col-md-4 pb-2">
+                    <label class="form-label">Data Fim:</label>
+                    <InputDate @bind-Value="EndDate" class="form-control" />
+                </div>
+                <div class="col-md-4 pb-2">
+                    <label class="form-label">Horários Disponíveis:</label>
+                    <button type="button" class="btn btn-primary" @onclick="GenerateSchedules">
+                        <i class="bi bi-plus-circle"></i> Gerar Horários
+                    </button>
+                </div>
+            </div>
+
+            <div class="d-flex flex-row-reverse bd-highlight">
+                <div class="p-2 bd-highlight">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-arrow-right-circle"></i> Salvar
+                    </button>
+                </div>
+                <div class="p-2 bd-highlight">
+                    <a href="/AgendaProfissionalMedico/index" class="btn btn-secondary">
+                        <i class="bi bi-dash-circle"></i> Cancelar
+                    </a>
+                </div>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+<!-- Calendário -->
+<div class="calendar-container">
+    <h3>Visualização dos Horários</h3>
+    <div id="calendar"></div>
+</div>
+
+
+<script>
+    function initializeCalendar(horarios) {
+        const events = horarios.map(horario => ({
+            title: 'Disponível',
+            start: new Date(horario.dataHora).toISOString(),
+            allDay: true
+        }));
+
+        const calendarEl = document.getElementById('calendar');
+        const calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: 'dayGridMonth',
+            events: events
+        });
+
+        calendar.render();
+    }
+</script>
+
+<link href="https://unpkg.com/fullcalendar/core/main.css" rel="stylesheet" />
+<link href="https://unpkg.com/fullcalendar/daygrid/main.css" rel="stylesheet" />
+<script src="https://unpkg.com/fullcalendar/core/main.js"></script>
+<script src="https://unpkg.com/fullcalendar/daygrid/main.js"></script>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private AgendaHorarioMedicoViewModel Model { get; set; } = new();
+    private List<MedicoViewModel> Medicos { get; set; } = new();
+    private string ErrorMessage { get; set; } = string.Empty;
+
+    private DateTime? StartDate { get; set; }
+    private DateTime? EndDate { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadMedicos();
+        await LoadHorarios(); // Carrega os horários existentes para visualização
+        if (Id.HasValue && Id.Value > 0)
+        {
+            await LoadHorario();
+        }
+    }
+
+    private async Task LoadMedicos()
+    {
+        try
+        {
+            var medicos = await _medicoApplication.GetAllAsync();
+            Medicos = _mapper.Map<List<MedicoViewModel>>(medicos);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Falha ao carregar médicos. " + ex.Message;
+        }
+    }
+
+    private async Task LoadHorarios()
+    {
+        try
+        {
+            var horarios = await _agendaHorarioMedicoApplication.GetAllAsync(); // Adapte conforme necessário
+                                                                                // Carrega os horários no calendário
+            await JSRuntime.InvokeVoidAsync("initializeCalendar", horarios);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Falha ao carregar os horários. " + ex.Message;
+        }
+    }
+
+    private async Task LoadHorario()
+    {
+        try
+        {
+            var horario = await _agendaHorarioMedicoApplication.GetAsync(Id.Value);
+            if (horario != null)
+            {
+                Model = _mapper.Map<AgendaHorarioMedicoViewModel>(horario);
+            }
+            else
+            {
+                ErrorMessage = "Horário não encontrado.";
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Falha ao carregar o horário. " + ex.Message;
+        }
+    }
+
+    private async Task OnValidSubmitAsync()
+    {
+        try
+        {
+            var horario = _mapper.Map<AgendaHorarioMedico>(Model);
+
+            if (Model.Id == 0)
+            {
+                await _agendaHorarioMedicoApplication.SaveAsync(horario);
+            }
+            else
+            {
+                var horarioAtualizar = await _agendaHorarioMedicoApplication.GetAsync(Model.Id);
+                _mapper.Map(horario, horarioAtualizar);
+                await _agendaHorarioMedicoApplication.UpdateAsync(horarioAtualizar);
+            }
+
+            navManager.NavigateTo("/AgendaProfissionalMedico/index");
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Falha ao processar os dados. Por favor, tente novamente. " + ex.Message;
+        }
+    }
+
+    private async Task GenerateSchedules()
+    {
+        if (StartDate.HasValue && EndDate.HasValue)
+        {
+            try
+            {
+                var horarios = GenerateTimeSlots(StartDate.Value, EndDate.Value);
+                await _agendaHorarioMedicoApplication.SaveRangeAsync(horarios);
+                ErrorMessage = "Horários gerados com sucesso!";
+                await LoadHorarios(); // Atualiza a visualização do calendário
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = "Erro ao gerar horários: " + ex.Message;
+            }
+        }
+        else
+        {
+            ErrorMessage = "Por favor, preencha o período corretamente.";
+        }
+    }
+
+    private IEnumerable<AgendaHorarioMedico> GenerateTimeSlots(DateTime startDate, DateTime endDate)
+    {
+        var horarios = new List<AgendaHorarioMedico>();
+        for (var time = startDate; time <= endDate; time = time.AddMinutes(30))
+        {
+            horarios.Add(new AgendaHorarioMedico
+                {
+                    DataHora = time,
+                    Disponivel = true,
+                    MedicoId = Model.MedicoId
+                });
+        }
+        return horarios;
+    }
+}

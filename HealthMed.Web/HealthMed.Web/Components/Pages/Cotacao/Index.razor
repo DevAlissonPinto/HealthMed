@@ -1,0 +1,302 @@
+﻿@page "/Cotacao/Index"
+@using HealthMed.Domain.Entities
+@using HealthMed.Domain.Interfaces.Application
+@using HealthMed.Infra.Repository.Context
+@using HealthMed.Web.Models
+@using Microsoft.AspNetCore.Components.Authorization
+@using Newtonsoft.Json
+@inject IBrapiApplication _brapiApplication
+@inject IAtivoApplication<HealthMedContext> _ativoApplication
+@inject ITransacaoApplication<HealthMedContext> _transacaoApplication
+@inject IPortfolioApplication<HealthMedContext> _portifolioApplication
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@implements IDisposable
+
+@rendermode InteractiveServer
+
+<style>
+    .alert-container {
+        position: fixed;
+        top: 1rem;
+        right: 1rem;
+        z-index: 1050;
+    }
+
+    .text-danger {
+        color: red;
+    }
+
+    .text-light {
+        color: white;
+    }
+</style>
+
+<div class="pagetitle">
+    <h1>Listagem de Ativos</h1>
+    <nav>
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/"><i class="bi bi-house-fill"></i></a></li>
+            <li class="breadcrumb-item active">Painel de Cotações</li>
+        </ol>
+    </nav>
+</div>
+
+@if (Cotacao != null && Cotacao.Any())
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Nome Curto</th>
+                <th>Nome Completo</th>
+                <th>Preço Atual</th>
+                <th>Variação</th>
+                <th>Variação Percentual</th>
+                <th>Data e Hora</th>
+                <th class="col-1">Quantidade</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var cotacao in Cotacao)
+            {
+                <tr>
+                    <td>@cotacao.ShortName</td>
+                    <td>@cotacao.LongName</td>
+                    <td>@cotacao.RegularMarketPrice.ToString("C")</td>
+                    <td class="@GetChangeClass(cotacao.RegularMarketChange)">@cotacao.RegularMarketChange.ToString("C")</td>
+                    <td class="@GetChangeClass(cotacao.RegularMarketChange)">
+                        @((cotacao.RegularMarketChangePercent).ToString("F2")) %
+                    </td>
+                    <td>@cotacao.RegularMarketTime.ToString("dd/MM/yyyy HH:mm:ss")</td>
+                    <td>
+                        <InputNumber @bind-Value="cotacao.QuantidadeNegociada" min="1" />
+                    </td>
+                    <td>
+                        <button class="btn btn-success me-2" @onclick="() => ComprarAtivo(cotacao.Symbol, cotacao.RegularMarketPrice, cotacao.QuantidadeNegociada)">
+                            <i class="bi bi-cart-plus"></i> Comprar
+                        </button>
+                        <button class="btn btn-danger" @onclick="() => VenderAtivo(cotacao.Symbol, cotacao.RegularMarketPrice, cotacao.QuantidadeNegociada)">
+                            <i class="bi bi-cart-dash"></i> Vender
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <p>Última atualização: @ultimaAtualizacao</p>
+    <p class="small fst-italic">Próxima atualização em: @tempoRestante segundos</p>
+}
+else
+{
+    <p>Carregando...</p>
+}
+
+<div class="alert-container">
+    @if (!string.IsNullOrEmpty(AlertMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @AlertMessage
+            <button type="button" class="btn-close" @onclick="HideAlert" aria-label="Close"></button>
+        </div>
+    }
+</div>
+
+@code {
+    private List<ResultadoViewModel> Cotacao { get; set; }
+    private string retornoJson { get; set; }
+    private Timer _updateTimer;
+    private Timer _countdownTimer;
+    private string ultimaAtualizacao;
+    private int tempoRestante = 20;
+    private string AlertMessage;
+
+    private string[] principaisAcoes;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var ativos = await _ativoApplication.GetAllAsync();
+
+        // Filtra os ativos do tipo Ação e obtém os códigos
+        principaisAcoes = ativos
+            .Select(a => a.Codigo)
+            .ToArray();
+
+        await FetchData();
+
+        // Configura o temporizador para atualizar a cada 20 segundos
+        _updateTimer = new Timer(async _ => await InvokeAsync(FetchData), null, TimeSpan.Zero, TimeSpan.FromSeconds(20));
+
+        // Configura o temporizador para o contador de atualização
+        _countdownTimer = new Timer(Countdown, null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+    }
+
+    private async Task FetchData()
+    {
+        var cotacoes = new List<ResultadoViewModel>();
+
+        foreach (var acao in principaisAcoes)
+        {
+            var response = await _brapiApplication.ObterCotacaoAcaoAsync(acao);
+
+            // Serializa a resposta para uma string JSON para fins de log e visualização
+            retornoJson = JsonConvert.SerializeObject(response, Formatting.Indented);
+
+            // Log da resposta no console (para depuração)
+            Console.WriteLine(retornoJson);
+            System.Diagnostics.Debug.WriteLine(retornoJson);
+
+            // Mapeia a resposta para a ViewModel
+            if (response?.Results != null)
+            {
+                var resultados = response.Results.Select(r => new ResultadoViewModel
+                    {
+                        Symbol = r.Symbol,
+                        ShortName = r.ShortName,
+                        LongName = r.LongName,
+                        RegularMarketChange = r.RegularMarketChange,
+                        RegularMarketChangePercent = r.RegularMarketChangePercent,
+                        RegularMarketTime = r.RegularMarketTime,
+                        RegularMarketPrice = r.RegularMarketPrice,
+                        RegularMarketDayHigh = r.RegularMarketDayHigh,
+                        RegularMarketDayRange = r.RegularMarketDayRange,
+                        RegularMarketDayLow = r.RegularMarketDayLow,
+                        RegularMarketVolume = r.RegularMarketVolume,
+                        RegularMarketPreviousClose = r.RegularMarketPreviousClose,
+                        RegularMarketOpen = r.RegularMarketOpen,
+                        FiftyTwoWeekRange = r.FiftyTwoWeekRange,
+                        FiftyTwoWeekLow = r.FiftyTwoWeekLow,
+                        FiftyTwoWeekHigh = r.FiftyTwoWeekHigh,
+                        PriceEarnings = r.PriceEarnings,
+                        EarningsPerShare = r.EarningsPerShare,
+                        LogoUrl = r.LogoUrl,
+                        QuantidadeNegociada = 1 // Inicializa a quantidade com 1
+                    });
+
+                cotacoes.AddRange(resultados);
+            }
+        }
+
+        Cotacao = cotacoes;
+
+        // Atualiza a variável de última atualização
+        ultimaAtualizacao = DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss");
+
+        // Reinicia o contador de tempo restante
+        tempoRestante = 20;
+
+        // Atualiza a interface do usuário
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void Countdown(object state)
+    {
+        if (tempoRestante > 0)
+        {
+            tempoRestante--;
+        }
+        InvokeAsync(StateHasChanged);
+    }
+
+    private string GetChangeClass(decimal change)
+    {
+        return change < 0 ? "text-danger" : "text-light";
+    }
+
+    private async Task ComprarAtivo(string symbol, decimal precoAtual, int quantidade)
+    {
+        if (quantidade > 0)
+        {
+            // Lógica para comprar o ativo
+            await RegistrarTransacao(symbol, precoAtual, true, quantidade);
+            MostrarAlert("Compra realizada com sucesso!");
+        }
+    }
+
+    private async Task VenderAtivo(string symbol, decimal precoAtual, int quantidade)
+    {
+        if (quantidade > 0)
+        {
+            // Lógica para vender o ativo
+            await RegistrarTransacao(symbol, precoAtual, false, quantidade);
+            MostrarAlert("Venda realizada com sucesso!");
+        }
+    }
+
+    private async Task RegistrarTransacao(string symbol, decimal preco, bool tipo, int quantidade)
+    {
+        try
+        {
+            // Recupera o AtivoId a partir do símbolo
+            var ativo = (await _ativoApplication.GetAllAsync(x => x.Codigo.Equals(symbol))).FirstOrDefault();
+
+            if (ativo == null)
+            {
+                // Lógica para tratar o caso de ativo não encontrado
+                Console.WriteLine($"Ativo com símbolo {symbol} não encontrado.");
+                return;
+            }
+
+            // Obtém o nome do usuário autenticado
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var userName = user.Identity?.Name;
+
+            if (string.IsNullOrEmpty(userName))
+            {
+                // Lógica para tratar o caso de usuário não autenticado
+                Console.WriteLine("Usuário não autenticado.");
+                return;
+            }
+
+            // Cria um novo registro de transação e atualiza o portfólio do usuário
+            var transacao = new Transacao
+                {
+                    Symbol = symbol,
+                    Preco = preco,
+                    Tipo = tipo,
+                    Quantidade = quantidade,
+                    Data = DateTime.Now,
+                    AtivoId = ativo.Id,
+                    UsuarioId = userName
+                };
+
+            await _transacaoApplication.SaveAsync(transacao);
+
+            // Atualiza o portfólio do usuário
+            await _portifolioApplication.AtualizarPortfolioAsync(transacao);
+
+            // Atualiza a interface do usuário
+            InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            // Log da exceção e exibição de uma mensagem de erro
+            Console.WriteLine($"Erro ao registrar transação: {ex.Message}");
+            // Adicione aqui qualquer lógica adicional para tratar o erro, como exibir uma mensagem ao usuário
+        }
+    }
+
+    private void MostrarAlert(string message)
+    {
+        AlertMessage = message;
+        InvokeAsync(StateHasChanged);
+        Task.Delay(5000).ContinueWith(_ =>
+        {
+            AlertMessage = string.Empty;
+            InvokeAsync(StateHasChanged);
+        });
+    }
+
+    private void HideAlert()
+    {
+        AlertMessage = string.Empty;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        _updateTimer?.Dispose();
+        _countdownTimer?.Dispose();
+    }
+}

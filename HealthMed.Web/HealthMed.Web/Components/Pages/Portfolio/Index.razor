@@ -1,0 +1,179 @@
+﻿@page "/portfolio/index"
+@using HealthMed.Web.Models
+@using HealthMed.Domain.Interfaces.Application
+@using HealthMed.Infra.Repository.Context
+@using AutoMapper
+@using Microsoft.AspNetCore.Components.Authorization
+
+@inject NavigationManager navManager
+@inject IPortfolioApplication<HealthMedContext> _portfolioApplication
+@inject IMapper _mapper
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+@rendermode InteractiveServer
+
+<PageTitle>Siss Saúde - Portfólios</PageTitle>
+
+<div class="pagetitle">
+    <h1>Listagem de Portfólios</h1>
+    <nav>
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/"><i class="bi bi-house-fill"></i></a></li>
+            <li class="breadcrumb-item active">Portfólios</li>
+        </ol>
+    </nav>
+</div>
+
+@if (showConfirmation)
+{
+    <div class="modal show" tabindex="-1" style="display:block; background-color: rgba(0,0,0,0.5);" @onclick="CloseModal">
+        <div class="modal-dialog">
+            <div class="modal-content" @onclick:stopPropagation>
+                <div class="modal-header">
+                    <h5 class="modal-title">@Title</h5>
+                    <button type="button" class="btn-close" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>@Body</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseModal">Cancelar</button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmDelete">Excluir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="card">
+    <div class="card-header">Portfólios Cadastrados</div>
+    <div class="card-body">
+        @if (Portfolios == null || Portfolios.Count == 0)
+        {
+            <p><em>@Mensagem</em></p>
+        }
+        else
+        {
+            <!-- Tabela de portfólios -->
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th class="col-2">Id</th>
+                        <th class="col-4">Nome</th>
+                        <th class="col-4">Descrição</th>
+                        <th class="col-2 text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var model in Portfolios)
+                    {
+                        <tr>
+                            <td>@model.Id.ToString()</td>
+                            <td>@model.Nome</td>
+                            <td>@model.Descricao</td>
+                            <td class="text-center">
+                                <!-- Botão de edição com ícone, que navega para a página de edição passando o Id -->
+                                <NavLink class="btn btn-primary btn-md" href="@($"/portfolio/{model.Id}")">
+                                    <i class="bi bi-pencil-square"></i>
+                                </NavLink>
+                                <!-- Botão de exclusão com ícone, que mostra a confirmação de exclusão -->
+                                <button class="btn btn-danger btn-md" @onclick="() => ShowDeleteConfirmation(model.Id)">
+                                    <i class="bi bi-trash-fill"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@* <div class="text-end mt-4">
+    <a href="/portfolio/create" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Cadastrar Novo Portfólio
+    </a>
+</div> *@
+
+@code {
+    private List<PortfolioViewModel> Portfolios { get; set; } = new();
+    public string Mensagem { get; set; } = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            Mensagem = "Carregando...";
+
+            Portfolios = (await CarregarPortfolios()).ToList();
+
+            if (Portfolios == null || Portfolios.Count == 0)
+                Mensagem = "Não há portfólios registrados no sistema.";
+        }
+        catch (Exception ex)
+        {
+            Mensagem = "Não há portfólios registrados no sistema.";
+            Console.WriteLine($"Erro ao carregar os portfólios: {ex.Message}");
+        }
+    }
+
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string Body { get; set; } = string.Empty;
+
+    private int selectedPortfolioId;
+    private bool showConfirmation = false;
+
+    private void ShowDeleteConfirmation(int portfolioId)
+    {
+        selectedPortfolioId = portfolioId;
+        Title = "Confirmar Exclusão";
+        Body = "Tem certeza de que deseja excluir este portfólio?";
+        showConfirmation = true;
+    }
+
+    private void CloseModal()
+    {
+        showConfirmation = false;
+        StateHasChanged(); // Força a atualização do estado da UI
+    }
+
+    private async Task ConfirmDelete()
+    {
+        try
+        {
+            await _portfolioApplication.DeleteAsync(selectedPortfolioId);
+
+            Portfolios = (await CarregarPortfolios()).ToList();
+
+            if (Portfolios == null || Portfolios.Count == 0)
+                Mensagem = "Não há portfólios registrados no sistema.";
+
+            CloseModal();
+        }
+        catch (Exception ex)
+        {
+            Mensagem = "Ocorreu um erro ao deletar o portfólio.";
+            Console.WriteLine($"Ocorreu um erro ao deletar o portfólio: {ex.Message}");
+        }
+    }
+
+    private async Task<IEnumerable<PortfolioViewModel>> CarregarPortfolios()
+    {
+        try
+        {
+
+            // Obtém o nome do usuário autenticado
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var userName = user.Identity?.Name;
+
+            var portfolios = await _portfolioApplication.GetAllAsync(x => x.UsuarioId.Equals(userName));
+            return _mapper.Map<IEnumerable<PortfolioViewModel>>(portfolios);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erro ao carregar os portfólios: {ex.Message}");
+            return Enumerable.Empty<PortfolioViewModel>();
+        }
+    }
+}

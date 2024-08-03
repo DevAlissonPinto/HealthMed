@@ -1,0 +1,258 @@
+﻿@page "/portfolio/{Id:int?}"
+@using HealthMed.Web.Models
+@using HealthMed.Domain.Interfaces.Application
+@using HealthMed.Infra.Repository.Context
+@using HealthMed.Domain.Entities
+@using AutoMapper
+
+@inject NavigationManager navManager
+@inject IPortfolioApplication<HealthMedContext> _portfolioApplication
+@inject IUsuarioApplication<HealthMedContext> _usuarioApplication
+@inject IAtivoApplication<HealthMedContext> _ativoApplication
+@inject IMapper _mapper
+
+@rendermode InteractiveServer
+
+<PageTitle>Siss Saúde - @((Model.Id == 0 ? "Cadastro de Portfólio" : "Edição de Portfólio"))</PageTitle>
+
+<div class="pagetitle">
+    <h1>@(Model.Id == 0 ? "Cadastro de Portfólio" : "Edição de Portfólio")</h1>
+    <nav>
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/"><i class="bi bi-house-fill"></i></a></li>
+            <li class="breadcrumb-item"><a href="/portfolio">Portfólio</a></li>
+            <li class="breadcrumb-item active">@(Model.Id == 0 ? "Cadastro" : "Edição")</li>
+        </ol>
+    </nav>
+</div>
+
+@if (!string.IsNullOrEmpty(ErrorMessage))
+{
+    <div class="alert alert-danger" role="alert">
+        @ErrorMessage
+    </div>
+}
+
+<div class="card">
+    <div class="card-header">Informações do Portfólio</div>
+    <div class="card-body">
+
+        <EditForm Model="@Model" OnValidSubmit="OnValidSubmitAsync">
+            <DataAnnotationsValidator />
+            <div class="row">
+                <div class="col-md-4 pb-2">
+                    <label class="form-label">Nome do Portfólio:</label>
+                    <InputText @bind-Value="Model.Nome" class="form-control" />
+                    <ValidationMessage For="@(() => Model.Nome)" />
+                </div>
+                <div class="col-md-4 pb-2">
+                    <label class="form-label">Descrição:</label>
+                    <InputText @bind-Value="Model.Descricao" class="form-control" />
+                    <ValidationMessage For="@(() => Model.Descricao)" />
+                </div>
+                <div class="col-md-4 pb-2">
+                    <label class="form-label">Usuário:</label>
+                    <InputSelect @bind-Value="Model.UsuarioId" class="form-control">
+                        @foreach (var usuario in Usuarios)
+                        {
+                            <option value="@usuario.Id">@usuario.Nome</option>
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="@(() => Model.UsuarioId)" />
+                </div>
+            </div>
+            <div class="d-flex flex-row-reverse bd-highlight">
+                <div class="p-2 bd-highlight">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-arrow-right-circle"></i> Salvar
+                    </button>
+                </div>
+                <div class="p-2 bd-highlight">
+                    <a href="/portfolio/index" class="btn btn-secondary">
+                        <i class="bi bi-dash-circle"></i> Cancelar
+                    </a>
+                </div>
+            </div>
+        </EditForm>
+
+        <hr />
+
+        <div class="card mt-3">
+            <div class="card-header">Ações no Portfólio</div>
+            <div class="card-body">
+       @*          <div class="row">
+                    <div class="col-md-6">
+                        <label class="form-label">Adicionar Ação:</label>
+                        <div class="d-flex align-items-center">
+                            <InputSelect @bind-Value="NovoAtivoId" class="form-control me-2">
+                                <option value="">Selecione um ativo</option>
+                                @foreach (var ativo in Ativos)
+                                {
+                                    <option value="@ativo.Id">@ativo.Nome (@ativo.Codigo)</option>
+                                }
+                            </InputSelect>
+                            <InputNumber @bind-Value="QuantidadeAtivo" class="form-control me-2" placeholder="Quantidade" />
+                            <button class="btn btn-primary" @onclick="AdicionarAtivo">Adicionar</button>
+                        </div>
+                    </div>
+                </div> *@
+                <table class="table mt-3">
+                    <thead>
+                        <tr>
+                            <th>Nome</th>
+                            <th>Código</th>
+                            <th>Quantidade</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.portfolioAtivos != null)
+                        {
+                            @foreach (var ativo in Model.portfolioAtivos)
+                            {
+                                <tr>
+                                    <td>@ativo.Ativo?.Nome</td>
+                                    <td>@ativo.Ativo?.Codigo</td>
+                                    <td>@ativo.Quantidade</td>
+                                    <td>
+                                        <button class="btn btn-danger" @onclick="() => RemoverAtivo(ativo.AtivoId)">Remover</button>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private PortfolioViewModel Model { get; set; } = new();
+    private List<UsuarioProfissionalViewModel> Usuarios { get; set; } = new();
+    private List<AtivoViewModel> Ativos { get; set; } = new();
+    private int? NovoAtivoId { get; set; }
+    private decimal QuantidadeAtivo { get; set; }
+    private string ErrorMessage { get; set; } = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsuarios();
+        await LoadAtivos();
+
+        if (Id.HasValue && Id.Value > 0)
+        {
+            await LoadPortfolio();
+        }
+        else
+        {
+            Model.portfolioAtivos = new List<PortfolioAtivoViewModel>(); // Inicializa a lista
+        }
+    }
+
+    private async Task LoadUsuarios()
+    {
+        try
+        {
+            var usuarios = await _usuarioApplication.GetAllAsync();
+            Usuarios = _mapper.Map<List<UsuarioProfissionalViewModel>>(usuarios);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Falha ao carregar usuários. " + ex.Message;
+        }
+    }
+
+    private async Task LoadAtivos()
+    {
+        try
+        {
+            var ativos = await _ativoApplication.GetAllAsync();
+            Ativos = _mapper.Map<List<AtivoViewModel>>(ativos);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Falha ao carregar ativos. " + ex.Message;
+        }
+    }
+
+    private async Task LoadPortfolio()
+    {
+        try
+        {
+            var portfolio = await _portfolioApplication.GetAsync(Id.Value, x => x.portfolioAtivos);
+
+            foreach (var ativo in portfolio.portfolioAtivos)
+            {
+                ativo.Ativo = await _ativoApplication.GetAsync(ativo.AtivoId);
+            }
+
+            if (portfolio != null)
+            {
+                Model = _mapper.Map<PortfolioViewModel>(portfolio);
+            }
+            else
+            {
+                ErrorMessage = "Portfólio não encontrado.";
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Falha ao carregar o portfólio. " + ex.Message;
+        }
+    }
+
+    private async Task OnValidSubmitAsync()
+    {
+        try
+        {
+            var portfolio = _mapper.Map<Portfolio>(Model);
+
+            if (Model.Id == 0)
+            {
+                await _portfolioApplication.SaveAsync(portfolio);
+            }
+            else
+            {
+                var portfolioAtualizar = await _portfolioApplication.GetAsync(Model.Id);
+                _mapper.Map(portfolio, portfolioAtualizar);
+                await _portfolioApplication.UpdateAsync(portfolioAtualizar);
+            }
+
+            navManager.NavigateTo("/portfolio/index");
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Falha ao processar os dados. Por favor, tente novamente. " + ex.Message;
+        }
+    }
+
+    private void AdicionarAtivo()
+    {
+        if (NovoAtivoId.HasValue && NovoAtivoId.Value > 0 && QuantidadeAtivo > 0)
+        {
+            var ativo = Ativos.FirstOrDefault(a => a.Id == NovoAtivoId.Value);
+            if (ativo != null)
+            {
+                Model.portfolioAtivos.Add(new PortfolioAtivoViewModel
+                    {
+                        AtivoId = ativo.Id,
+                        Ativo = ativo,
+                        Quantidade = QuantidadeAtivo
+                    });
+            }
+        }
+    }
+
+    private void RemoverAtivo(int ativoId)
+    {
+        var ativo = Model.portfolioAtivos.FirstOrDefault(a => a.AtivoId == ativoId);
+        if (ativo != null)
+        {
+            Model.portfolioAtivos.Remove(ativo);
+        }
+    }
+}

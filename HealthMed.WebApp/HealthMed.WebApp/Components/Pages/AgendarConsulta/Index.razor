@@ -1,0 +1,222 @@
+﻿@page "/AgendarConsulta/index"
+
+@using HealthMed.Web.Models
+@using HealthMed.Domain.Interfaces.Application
+@using HealthMed.Infra.Repository.Context
+@using HealthMed.Domain.Entities
+@using AutoMapper
+@using System.Security.Claims
+@inject NavigationManager navManager
+@inject IPacienteAgendaConsultaApplication<HealthMedContext> _pacienteAgendaConsultaApplication
+@inject IProfissionalMedicoApplication<HealthMedContext> _medicoApplication
+@inject IAgendaHorarioMedicoApplication<HealthMedContext> _agendaHorarioMedicoApplication
+@inject IMapper _mapper
+@inject Microsoft.AspNetCore.Http.IHttpContextAccessor _httpContextAccessor
+@inject IProfissionalMedicoApplication<HealthMedContext> ProfissionalMedicoApplication
+
+@rendermode InteractiveServer
+
+<PageTitle>HealthMed - Agendar Consulta</PageTitle>
+
+<div class="pagetitle">
+    <h1>Agendar Consulta</h1>
+    <nav>
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/"><i class="bi bi-house-fill"></i></a></li>
+            <li class="breadcrumb-item active">Agendar Consulta</li>
+        </ol>
+    </nav>
+</div>
+
+@if (!string.IsNullOrEmpty(ErrorMessage))
+{
+    <div class="alert alert-danger" role="alert">
+        @ErrorMessage
+    </div>
+}
+
+<div class="card">
+    <div class="card-header">Informações para Agendamento</div>
+    <div class="card-body">
+        <EditForm Model="@Model" OnValidSubmit="OnValidSubmitAsync">
+            <DataAnnotationsValidator />
+            <div class="row">
+                <div class="col-md-6 pb-2">
+                    <label class="form-label">Profissional:</label>
+
+                   
+
+                    <!--SelectedMedicoId
+                    @onchange="OnMedicoChanged"-->
+                    <InputSelect class="form-control" ValueExpression="@(()=>SelectedMedicoId)"
+                                 Value="@SelectedMedicoId"
+                                 ValueChanged="@((int value) => OnValueChanged(value))">
+                        <option value="">Selecione um profissional</option>
+                        @foreach (var medico in Medicos)
+                        {
+                            <option value="@medico.Id">@medico.Nome</option>
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="@(() => SelectedMedicoId)" />
+                </div>
+                <div class="col-md-6 pb-2">
+                    <label class="form-label">Horário Disponível:</label>
+                    <InputSelect @bind-Value="SelectedHorarioId" class="form-control">
+                        <option value="">Selecione um horário</option>
+                        @foreach (var horario in Horarios)
+                        {
+                            <option value="@horario.Id">@horario.DataHora.ToString("dd/MM/yyyy HH:mm")</option>
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="@(() => SelectedHorarioId)" />
+                </div>
+            </div>
+
+            <div class="d-flex flex-row-reverse bd-highlight">
+                <div class="p-2 bd-highlight">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-circle"></i> Agendar Consulta
+                    </button>
+                </div>
+                <div class="p-2 bd-highlight">
+                    <a href="/" class="btn btn-secondary">
+                        <i class="bi bi-x-circle"></i> Cancelar
+                    </a>
+                </div>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@if (showConfirmation)
+{
+    <div class="modal show" tabindex="-1" style="display:block; background-color: rgba(0,0,0,0.5);" @onclick="CloseModal">
+        <div class="modal-dialog">
+            <div class="modal-content" @onclick:stopPropagation>
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirmar Agendamento</h5>
+                    <button type="button" class="btn-close" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Tem certeza de que deseja agendar esta consulta?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseModal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" @onclick="ConfirmAgendamento">Sim</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private PacienteAgendaConsultaViewModel Model { get; set; } = new();
+    private List<MedicoViewModel> Medicos { get; set; } = new();
+    private List<AgendaHorarioMedicoViewModel> Horarios { get; set; } = new();
+    private int SelectedMedicoId { get; set; }
+    private int SelectedHorarioId { get; set; }
+    private string ErrorMessage { get; set; } = string.Empty;
+    private bool showConfirmation = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadMedicos();
+    }
+
+    private async Task OnValueChanged(int value)
+    {
+        // Assign the selected value to the Model
+        SelectedMedicoId = value;
+
+        await LoadHorarios(SelectedMedicoId);
+
+    }
+
+    private async Task LoadMedicos()
+    {
+        try
+        {
+            var medicos = await _medicoApplication.GetAllAsync();
+            Medicos = _mapper.Map<List<MedicoViewModel>>(medicos);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Falha ao carregar médicos. " + ex.Message;
+        }
+    }
+
+    private async Task OnMedicoChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value.ToString(), out int medicoId))
+        {
+            SelectedMedicoId = medicoId;
+            await LoadHorarios(medicoId);
+        }
+    }
+
+    private async Task LoadHorarios(int medicoId)
+    {
+        try
+        {
+            var horarios = await _agendaHorarioMedicoApplication.GetByMedicoIdAsync(medicoId);
+            Horarios = _mapper.Map<List<AgendaHorarioMedicoViewModel>>(horarios).Where(h => h.Disponivel).ToList();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Falha ao carregar horários. " + ex.Message;
+        }
+    }
+
+    private void ShowConfirmationModal()
+    {
+        showConfirmation = true;
+    }
+
+    private void CloseModal()
+    {
+        showConfirmation = false;
+        StateHasChanged(); // Força a atualização do estado da UI
+    }
+
+    private async Task OnValidSubmitAsync()
+    {
+        ShowConfirmationModal();
+    }
+
+    private async Task ConfirmAgendamento()
+    {
+        try
+        {
+            // Verificação de conflito de horários
+            //var isHorarioDisponivel = await _agendaHorarioMedicoApplication.CheckHorarioDisponivelAsync(SelectedHorarioId);
+            //if (!isHorarioDisponivel)
+            //{
+            //ErrorMessage = "O horário selecionado já está ocupado. Por favor, escolha outro horário.";
+            //CloseModal();
+            //return;
+            //}
+
+            var usuarioLogado = ProfissionalMedicoApplication.GetByEmail(_httpContextAccessor.HttpContext.User.FindFirst(ClaimTypes.Email).Value);
+
+            // Agendamento da consulta
+            var agendamento = new PacienteAgendaConsulta
+                {
+                    MedicoId = SelectedMedicoId,
+                    HorarioId = SelectedHorarioId,                    
+                    PacienteId = usuarioLogado.Id, // Ajustar para pegar o ID do paciente logado
+                    DataInclusao = DateTime.Now
+                };
+
+            await _pacienteAgendaConsultaApplication.SaveAsync(agendamento);
+
+
+
+            navManager.NavigateTo("/AgendarConsulta/index");
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Falha ao agendar a consulta. " + ex.Message;
+            CloseModal();
+        }
+    }
+}

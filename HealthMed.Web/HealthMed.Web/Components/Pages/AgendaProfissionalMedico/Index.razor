@@ -1,0 +1,219 @@
+﻿
+@page "/AgendaProfissionalMedico/index"
+
+@using HealthMed.Web.Models
+@using HealthMed.Domain.Interfaces.Application
+@using HealthMed.Infra.Repository.Context
+@using AutoMapper
+@using HealthMed.Domain.Entities
+
+@inject NavigationManager navManager
+@inject IAgendaHorarioMedicoApplication<HealthMedContext> _agendaHorarioMedicoApplication
+@inject IMapper _mapper
+
+@rendermode InteractiveServer
+
+<PageTitle>HealthMed - Agendas dos Médicos</PageTitle>
+
+<div class="pagetitle">
+    <h1>Listagem de Agendas dos Médicos</h1>
+    <nav>
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/"><i class="bi bi-house-fill"></i></a></li>
+            <li class="breadcrumb-item active">Agendas dos Médicos</li>
+        </ol>
+    </nav>
+</div>
+
+@if (showConfirmation)
+{
+    <div class="modal show" tabindex="-1" style="display:block; background-color: rgba(0,0,0,0.5);" @onclick="CloseModal">
+        <div class="modal-dialog">
+            <div class="modal-content" @onclick:stopPropagation>
+                <div class="modal-header">
+                    <h5 class="modal-title">@Title</h5>
+                    <button type="button" class="btn-close" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>@Body</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseModal">Cancelar</button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmDelete">Excluir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="card">
+    <div class="card-header">
+        Agendas dos Médicos Cadastradas
+    </div>
+    <div class="card-body">
+        <!-- Campos de filtro por período -->
+        <div class="row mb-3">
+            <div class="col-md-5">
+                <label for="dataInicio" class="form-label">Data Início</label>
+                <input type="date" id="dataInicio" class="form-control" @bind="dataInicio">
+            </div>
+            <div class="col-md-5">
+                <label for="dataFim" class="form-label">Data Fim</label>
+                <input type="date" id="dataFim" class="form-control" @bind="dataFim">
+            </div>
+            <div class="col-md-2 align-self-end">
+                <button class="btn btn-primary" @onclick="FiltrarPorPeriodo">Filtrar</button>
+            </div>
+        </div>
+
+        @if (Agendas == null || Agendas.Count == 0)
+        {
+            <p><em>@Mensagem</em></p>
+        }
+        else
+        {
+            <!-- Tabela de agendas -->
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th class="col-2">Id</th>
+                        <th class="col-4">Data e Hora</th>
+                        <th class="col-2">Disponível</th>
+                        <th class="col-4">Médico</th>
+                        <th class="col-2 text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var model in Agendas)
+                    {
+                        <tr>
+                            <td>@model.Id.ToString()</td>
+                            <td>@model.DataHora.ToString("dd/MM/yyyy HH:mm")</td>
+                            <td>@(model.Disponivel ? "Sim" : "Não")</td>
+                            <td>@model.Medico.Nome</td>
+                            <td class="text-center">
+                                <!-- Botão de edição com ícone, que navega para a página de edição passando o Id -->
+                                <NavLink class="btn btn-primary btn-md" href="@($"/AgendaProfissionalMedico/{model.Id}")">
+                                    <i class="bi bi-pencil-square"></i>
+                                </NavLink>
+                                <!-- Botão de exclusão com ícone, que mostra a confirmação de exclusão -->
+                                <button class="btn btn-danger btn-md" @onclick="() => ShowDeleteConfirmation(model.Id)">
+                                    <i class="bi bi-trash-fill"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+<div class="text-end mt-4">
+    <a href="AgendaProfissionalMedico/" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Cadastrar Nova Agenda
+    </a>
+</div>
+
+@code {
+    private List<AgendaHorarioMedicoViewModel> Agendas { get; set; } = new();
+    public string Mensagem { get; set; } = string.Empty;
+    private DateTime? dataInicio;
+    private DateTime? dataFim;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CarregarAgendas();
+    }
+
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string Body { get; set; } = string.Empty;
+
+    private int selectedAgendaId;
+    private bool showConfirmation = false;
+
+    private void ShowDeleteConfirmation(int agendaId)
+    {
+        selectedAgendaId = agendaId;
+        Title = "Confirmar Exclusão";
+        Body = "Tem certeza de que deseja excluir esta agenda?";
+        showConfirmation = true;
+    }
+
+    private void CloseModal()
+    {
+        showConfirmation = false;
+        StateHasChanged(); // Força a atualização do estado da UI
+    }
+
+    private async Task ConfirmDelete()
+    {
+        try
+        {
+            await _agendaHorarioMedicoApplication.DeleteAsync(selectedAgendaId);
+
+            await CarregarAgendas();
+
+            if (Agendas == null || Agendas.Count == 0)
+                Mensagem = "Não há agendas registradas no sistema.";
+
+            CloseModal();
+        }
+        catch (Exception ex)
+        {
+            Mensagem = "Ocorreu um erro ao deletar a agenda.";
+            Console.WriteLine($"Ocorreu um erro ao deletar a agenda: {ex.Message}");
+        }
+    }
+
+    private async Task CarregarAgendas()
+    {
+        try
+        {
+            Mensagem = "Carregando...";
+
+            var agendas = await _agendaHorarioMedicoApplication.GetAllAsync();
+            MapperAgendas(_mapper.Map<IEnumerable<AgendaHorarioMedicoViewModel>>(agendas));
+
+            if (Agendas == null || Agendas.Count == 0)
+                Mensagem = "Não há agendas registradas no sistema.";
+        }
+        catch (Exception ex)
+        {
+            Mensagem = "Não há agendas registradas no sistema.";
+            Console.WriteLine($"Erro ao carregar as agendas: {ex.Message}");
+        }
+    }
+
+    private async Task FiltrarPorPeriodo()
+    {
+        try
+        {
+            Mensagem = "Carregando...";
+
+            var agendas = await _agendaHorarioMedicoApplication.GetAllAsync();
+
+            if (dataInicio.HasValue)
+            {
+                agendas = agendas.Where(a => a.DataHora >= dataInicio.Value);
+            }
+
+            if (dataFim.HasValue)
+            {
+                agendas = agendas.Where(a => a.DataHora <= dataFim.Value);
+            }
+
+            MapperAgendas(_mapper.Map<IEnumerable<AgendaHorarioMedicoViewModel>>(agendas));
+
+            if (Agendas == null || Agendas.Count == 0)
+                Mensagem = "Não há agendas registradas no sistema.";
+        }
+        catch (Exception ex)
+        {
+            Mensagem = "Erro ao carregar as agendas.";
+            Console.WriteLine($"Erro ao carregar as agendas: {ex.Message}");
+        }
+    }
+
+    private void MapperAgendas(IEnumerable<AgendaHorarioMedicoViewModel> agendas) => Agendas = _mapper.Map<List<AgendaHorarioMedicoViewModel>>(agendas);
+}

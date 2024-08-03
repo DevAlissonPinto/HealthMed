@@ -1,0 +1,155 @@
+﻿@page "/ativo/{Id:int?}"
+@using HealthMed.Domain.Entities
+@using HealthMed.Domain.Interfaces.Application
+@using HealthMed.Infra.Repository.Context
+@using HealthMed.Web.Models
+@using AutoMapper
+
+@inject NavigationManager navManager
+@inject IAtivoApplication<HealthMedContext> _ativoApplication
+@inject IPortfolioApplication<HealthMedContext> _portfolioApplication
+@inject IMapper _mapper
+
+@rendermode InteractiveServer
+
+<PageTitle>Siss Saúde - @((Model.Id == 0 ? "Cadastro de Ativo" : "Edição de Ativo"))</PageTitle>
+
+<div class="pagetitle">
+    <h1>@(Model.Id == 0 ? "Cadastro de Ativo" : "Edição de Ativo")</h1>
+    <nav>
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/"><i class="bi bi-house-fill"></i></a></li>
+            <li class="breadcrumb-item"><a href="/ativo">Ativo</a></li>
+            <li class="breadcrumb-item active">@(Model.Id == 0 ? "Cadastro" : "Edição")</li>
+        </ol>
+    </nav>
+</div>
+
+@if (!string.IsNullOrEmpty(ErrorMessage))
+{
+    <div class="alert alert-danger" role="alert">
+        @ErrorMessage
+    </div>
+}
+
+<div class="card">
+    <div class="card-header">Informações do Ativo</div>
+    <div class="card-body">
+
+        <EditForm Model="@Model" OnValidSubmit="OnValidSubmitAsync">
+            <DataAnnotationsValidator />
+            <div class="row">
+                <div class="col-md-4 pb-2">
+                    <label class="form-label">Tipo do Ativo:</label>
+                    <InputSelect @bind-Value="Model.TipoAtivo" class="form-control">
+                        @foreach (var tipo in Enum.GetValues(typeof(enumTipoAtivoViewModel)).Cast<enumTipoAtivoViewModel>())
+                        {
+                            <option value="@tipo">@tipo.ToString()</option>
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="@(() => Model.TipoAtivo)" />
+                </div>
+                <div class="col-md-4 pb-2">
+                    <label class="form-label">Nome do Ativo:</label>
+                    <InputText @bind-Value="Model.Nome" class="form-control" />
+                    <ValidationMessage For="@(() => Model.Nome)" />
+                </div>
+                <div class="col-md-4 pb-2">
+                    <label class="form-label">Código do Ativo:</label>
+                    <InputText @bind-Value="Model.Codigo" class="form-control" />
+                    <ValidationMessage For="@(() => Model.Codigo)" />
+                </div>
+            </div>
+            <div class="d-flex flex-row-reverse bd-highlight">
+                <div class="p-2 bd-highlight">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-arrow-right-circle"></i> Salvar
+                    </button>
+                </div>
+                <div class="p-2 bd-highlight">
+                    <a href="/ativos/index" class="btn btn-secondary">
+                        <i class="bi bi-dash-circle"></i> Cancelar
+                    </a>
+                </div>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private AtivoViewModel Model { get; set; } = new();
+    private string ErrorMessage { get; set; } = string.Empty;
+    private bool isConfirming = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isConfirming = false;
+        ErrorMessage = string.Empty;
+
+        await LoadAtivo();
+    }
+
+    private async Task LoadAtivo()
+    {
+        try
+        {
+            if (Id.HasValue && Id.Value > 0)
+            {
+                var ativo = await _ativoApplication.GetAsync(Id.Value);
+                if (ativo != null)
+                {
+                    Model = _mapper.Map<AtivoViewModel>(ativo);
+                }
+                else
+                {
+                    ErrorMessage = "Ativo não encontrado.";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Falha ao carregar o ativo. " + ex.Message;
+        }
+    }
+
+    private async Task OnValidSubmitAsync()
+    {
+        try
+        {
+            isConfirming = true;
+            ErrorMessage = string.Empty;
+            StateHasChanged();
+
+            var model = _mapper.Map<Ativo>(Model);
+
+            if (Model.Id == 0)
+            {
+                await _ativoApplication.SaveAsync(model);
+            }
+            else
+            {
+                await _ativoApplication.UpdateAsync(model);
+            }
+
+            navManager.NavigateTo("/ativo");
+        }
+        catch (Exception ex)
+        {
+            isConfirming = false;
+            Console.WriteLine($"Ocorreu um erro: {ex.Message}");
+            ErrorHandling("Falha ao processar os dados. Por favor, tente novamente. " + ex.Message);
+        }
+    }
+
+    private void ErrorHandling(string message, Exception? innerException = default)
+    {
+        if (innerException != null)
+        {
+            message += $" Inner Exception: {innerException.Message}";
+        }
+        ErrorMessage = message;
+        InvokeAsync(StateHasChanged);
+    }
+}
